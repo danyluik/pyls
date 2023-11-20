@@ -778,4 +778,5 @@ class BasePLS():
             vcorr[:,i] = compute.efficient_corr(V1, V2)
 
         # return correlations for singular vectors across `n_split`
-        return ucorr, vcorr
+        # absolute values to account for arbitrary sign flips
+        return np.absolute(ucorr), np.absolute(vcorr)
