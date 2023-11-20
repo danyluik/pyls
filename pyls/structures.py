@@ -320,6 +320,7 @@ class PLSSplitHalfResults(ResDict):
     """
     allowed = [
         'ucorr', 'vcorr',
+        'avg_ucorr', 'avg_vcorr',
         'ucorr_pvals', 'vcorr_pvals',
         'ucorr_uplim', 'vcorr_uplim',
         'ucorr_lolim', 'vcorr_lolim'

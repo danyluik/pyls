@@ -373,10 +373,14 @@ class BasePLS():
                 # get ucorr / vcorr (via split half resampling) for original,
                 # unpermuted `X` and `Y` arrays
                 di = np.linalg.inv(res['singvals'])
-                orig_ucorr, orig_vcorr = self.split_half(X, Y,
-                                                         res['x_weights'] @ di,
-                                                         res['y_weights'] @ di,
-                                                         seed=self.rs)
+                ucorr, vcorr = self.split_half(X, Y,
+                                                res['x_weights'] @ di,
+                                                res['y_weights'] @ di,
+                                                seed=self.rs)
+                # get acerage for permutation testing
+                avg_ucorr = np.mean(ucorr, axis=-1)
+                avg_vcorr = np.mean(vcorr, axis=-1)
+
                 # get p-values for ucorr/vcorr
                 ucorr_prob = compute.perm_sig(np.diag(orig_ucorr), ucorrs)
                 vcorr_prob = compute.perm_sig(np.diag(orig_vcorr), vcorrs)
@@ -386,8 +390,10 @@ class BasePLS():
                 vcorr_ll, vcorr_ul = compute.boot_ci(vcorrs, ci=self.inputs.ci)
 
                 # update results object with split-half resampling results
-                res['splitres'].update(dict(ucorr=orig_ucorr,
-                                            vcorr=orig_vcorr,
+                res['splitres'].update(dict(ucorr=ucorr,
+                                            vcorr=vcorr,
+                                            avg_ucorr=avg_ucorr,
+                                            avg_vcorr=avg_vcorr,
                                             ucorr_pvals=ucorr_prob,
                                             vcorr_pvals=vcorr_prob,
                                             ucorr_lolim=ucorr_ll,
@@ -695,6 +701,9 @@ class BasePLS():
             di = np.linalg.inv(d)
             ucorr, vcorr = self.split_half(Xp, Yp, U @ di, V @ di,
                                            groups=groups, seed=seed)
+            # Get ucorr/vcorr average across splits to make a value for a null distribution
+            ucorr = np.mean(ucorr, axis=-1)
+            vcorr = np.mean(vcorr, axis=-1)
         else:
             ucorr, vcorr = None, None
 
@@ -745,15 +754,28 @@ class BasePLS():
         vcorr = np.zeros(shape=(vd.shape[-1], self.inputs.n_split))
 
         for i in range(self.inputs.n_split):
-            # calculate cross-covariance matrix for both splits
+            # get X and Y for either splits
             spl = splitsamp[:, i]
-            D1 = self.gen_covcorr(X[spl], Y[spl], groups=groups[spl])
-            D2 = self.gen_covcorr(X[~spl], Y[~spl], groups=groups[~spl])
+            X1 = X[spl]
+            Y1 = Y[spl]
+            X2 = X[~spl]
+            Y2 = Y[~spl]
 
-            # project cross-covariance matrices onto original SVD to obtain
-            # left & right singular vector and correlate between split halves
-            ucorr[:, i] = compute.efficient_corr(D1.T @ vd, D2.T @ vd)
-            vcorr[:, i] = compute.efficient_corr(D1 @ ud, D2 @ ud)
+            # group labels (should just dummy code)
+            if groups is None:
+                groups1 = utils.dummy_code([X1.shape[0]], self.inputs.n_cond)
+                groups2 = utils.dummy_code([X2.shape[0]], self.inputs.n_cond)
+            else:
+                groups1 = groups[spl]
+                groups2 = groups[spl]
 
-        # return average correlations for singular vectors across `n_split`
-        return np.mean(ucorr, axis=-1), np.mean(vcorr, axis=-1)
+            # run SVD separately for each split
+            U1, d1, V1 = self.svd(X1, Y1, groups=groups1, seed=seed)
+            U2, d2, V2 = self.svd(X2, Y2, groups=groups2, seed=seed)
+
+            # Correlate U and V weights for both splits across subjects
+            ucorr[:,i] = compute.efficient_corr(U1, U2)
+            vcorr[:,i] = compute.efficient_corr(V1, V2)
+
+        # return correlations for singular vectors across `n_split`
+        return ucorr, vcorr
