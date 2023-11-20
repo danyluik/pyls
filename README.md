@@ -50,5 +50,5 @@ The outputs are summarized below:
 * **splitres_ucorr_lp-uplim.csv, splitres_ucorr_lp-uplim.csv** (L x 2): 95% confidence intervals of average split-half values across permutations for each LV. Lower limit in the first column, upper limit in the second.
 
 
-
+Note that for any analysis you do with the split-half values, make sure you take the absolute value of the correlation coefficients to account for any arbitrary sign flips within a given split.
 
