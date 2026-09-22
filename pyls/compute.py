@@ -243,7 +243,7 @@ def procrustes(original, permuted, singular):
 
     `original` and `permuted` should be either left *or* right singular
     vector from two SVDs. `singular` should be the diagonal matrix of
-    singular values from the SVD that generated `original`
+    singular values from the SVD that generated `permuted`
 
     Parameters
     ----------

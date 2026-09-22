@@ -183,10 +183,19 @@ class BehavioralPLS(BasePLS):
 
         res = super().run_pls(X, Y)
 
+        # scores should be computed from the same kind of data the weights
+        # came from: standardized (z-scored) for correlation, raw for covariance
+        if self.inputs.covariance:
+            Xz, Yz = X, Y
+        else:
+            Xz, Yz = compute.zscore(X, ddof=1), compute.zscore(Y, ddof=1)
+
+        res['x_scores'] = Xz @ res['x_weights']
+
         # mechanism for splitting outputs along group / condition indices
         grps = np.repeat(res['inputs']['groups'], res['inputs']['n_cond'])
         res['y_scores'] = np.vstack([
-            y @ v for (y, v) in zip(np.split(Y, np.cumsum(grps)[:-1]),
+            y @ v for (y, v) in zip(np.split(Yz, np.cumsum(grps)[:-1]),
                                     np.split(res['y_weights'], len(grps)))
         ])
 
@@ -196,24 +205,33 @@ class BehavioralPLS(BasePLS):
 
         if self.inputs.n_boot > 0:
             # compute bootstraps
-            distrib, u_sum, u_square = self.bootstrap(X, Y, self.rs)
+            try:
+                distrib, u_sum, u_square = self.bootstrap(X, Y, self.rs)
+                
+                # add original scaled singular vectors back in
+                bs = res['x_weights'] @ res['singvals']
+                u_sum, u_square = u_sum + bs, u_square + (bs ** 2)
 
-            # add original scaled singular vectors back in
-            bs = res['x_weights'] @ res['singvals']
-            u_sum, u_square = u_sum + bs, u_square + (bs ** 2)
+                # calculate bootstrap ratios and confidence intervals
+                bsrs, uboot_se = compute.boot_rel(bs, u_sum, u_square,
+                                                self.inputs.n_boot + 1)
+                corrci = np.stack(compute.boot_ci(distrib, ci=self.inputs.ci), -1)
 
-            # calculate bootstrap ratios and confidence intervals
-            bsrs, uboot_se = compute.boot_rel(bs, u_sum, u_square,
-                                              self.inputs.n_boot + 1)
-            corrci = np.stack(compute.boot_ci(distrib, ci=self.inputs.ci), -1)
+                # update results.boot_result dictionary
+                res['bootres'].update(dict(x_weights_normed=bsrs,
+                                        x_weights_stderr=uboot_se,
+                                        y_loadings=res['y_loadings'].copy(),
+                                        y_loadings_boot=distrib,
+                                        y_loadings_ci=corrci,
+                                        bootsamples=self.bootsamp))
+            except:
+                res['bootres'].update(dict(x_weights_normed=None,
+                                       x_weights_stderr=None,
+                                       y_loadings=None,
+                                       y_loadings_boot=None,
+                                       y_loadings_ci=None,
+                                       bootsamples=None))
 
-            # update results.boot_result dictionary
-            res['bootres'].update(dict(x_weights_normed=bsrs,
-                                       x_weights_stderr=uboot_se,
-                                       y_loadings=res['y_loadings'].copy(),
-                                       y_loadings_boot=distrib,
-                                       y_loadings_ci=corrci,
-                                       bootsamples=self.bootsamp))
 
         # compute cross-validated prediction-based metrics
         if self.inputs.test_split is not None and self.inputs.test_size > 0:
@@ -232,13 +250,14 @@ def behavioral_pls(X, Y, *, groups=None, n_cond=1, n_perm=5000, n_boot=5000,
                    n_split=0, test_size=0.25, test_split=100,
                    covariance=False, rotate=True, ci=95, permsamples=None,
                    bootsamples=None, seed=None, verbose=True, n_proc=None,
-                   **kwargs):
+                   rotate_method='right', **kwargs):
     pls = BehavioralPLS(X=X, Y=Y, groups=groups, n_cond=n_cond,
                         n_perm=n_perm, n_boot=n_boot, n_split=n_split,
                         test_size=test_size, test_split=test_split,
                         covariance=covariance, rotate=rotate, ci=ci,
                         permsamples=permsamples, bootsamples=bootsamples,
-                        seed=seed, verbose=verbose, n_proc=n_proc, **kwargs)
+                        seed=seed, verbose=verbose, n_proc=n_proc,
+                        rotate_method=rotate_method, **kwargs)
     return pls.results
 
 

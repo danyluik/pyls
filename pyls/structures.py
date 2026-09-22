@@ -142,7 +142,7 @@ class PLSInputs(ResDict):
         'X', 'Y', 'groups', 'n_cond', 'n_perm', 'n_boot', 'n_split',
         'test_split', 'test_size', 'mean_centering', 'covariance', 'rotate',
         'ci', 'seed', 'verbose', 'n_proc', 'bootsamples', 'permsamples',
-        'method', 'n_components', 'aggfunc'
+        'method', 'n_components', 'aggfunc', 'rotate_method'
     ]
 
     def __init__(self, *args, **kwargs):
@@ -292,7 +292,7 @@ class PLSPermResults(ResDict):
         Resampling array used to permute `S` samples over `P` permutations
     """
     allowed = [
-        'pvals', 'permsamples'
+        'pvals', 'permsamples', 'perm_singvals'
     ]
 
 

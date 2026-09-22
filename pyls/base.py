@@ -367,33 +367,47 @@ class BasePLS():
             # compute permutations and get statistical significance of LVs
             d_perm, ucorrs, vcorrs = self.permutation(X, Y, seed=self.rs)
             res['permres']['pvals'] = compute.perm_sig(res['singvals'], d_perm)
+            res['permres']['perm_singvals'] = d_perm
             res['permres']['permsamples'] = self.permsamp
 
             if self.inputs.n_split is not None:
-                # get ucorr / vcorr (via split half resampling) for original,
-                # unpermuted `X` and `Y` arrays
-                di = np.linalg.inv(res['singvals'])
-                orig_ucorr, orig_vcorr = self.split_half(X, Y,
-                                                         res['x_weights'] @ di,
-                                                         res['y_weights'] @ di,
-                                                         seed=self.rs)
-                # get p-values for ucorr/vcorr
-                ucorr_prob = compute.perm_sig(np.diag(orig_ucorr), ucorrs)
-                vcorr_prob = compute.perm_sig(np.diag(orig_vcorr), vcorrs)
+                # get sets of ucorr and vcorr by split halves
+                # This di stuff isn't needed the way I'm doing it now
+                try: 
+                    di = np.linalg.inv(res['singvals'])
+                    ucorr, vcorr = self.split_half(X, Y,
+                                                    res['x_weights'] @ di,
+                                                    res['y_weights'] @ di,
+                                                    seed=self.rs)
+                    
+                    res['splitres'].update(dict(ucorr=ucorr, vcorr=vcorr))
+                except:
+                    res['splitres'].update(dict(ucorr=None, vcorr=None))
 
-                # get confidence intervals for ucorr/vcorr
-                ucorr_ll, ucorr_ul = compute.boot_ci(ucorrs, ci=self.inputs.ci)
-                vcorr_ll, vcorr_ul = compute.boot_ci(vcorrs, ci=self.inputs.ci)
+                # # get ucorr / vcorr (via split half resampling) for original,
+                # # unpermuted `X` and `Y` arrays
+                # di = np.linalg.inv(res['singvals'])
+                # orig_ucorr, orig_vcorr = self.split_half(X, Y,
+                #                                          res['x_weights'] @ di,
+                #                                          res['y_weights'] @ di,
+                #                                          seed=self.rs)
+                # # get p-values for ucorr/vcorr
+                # ucorr_prob = compute.perm_sig(np.diag(orig_ucorr), ucorrs)
+                # vcorr_prob = compute.perm_sig(np.diag(orig_vcorr), vcorrs)
 
-                # update results object with split-half resampling results
-                res['splitres'].update(dict(ucorr=orig_ucorr,
-                                            vcorr=orig_vcorr,
-                                            ucorr_pvals=ucorr_prob,
-                                            vcorr_pvals=vcorr_prob,
-                                            ucorr_lolim=ucorr_ll,
-                                            vcorr_lolim=vcorr_ll,
-                                            ucorr_uplim=ucorr_ul,
-                                            vcorr_uplim=vcorr_ul))
+                # # get confidence intervals for ucorr/vcorr
+                # ucorr_ll, ucorr_ul = compute.boot_ci(ucorrs, ci=self.inputs.ci)
+                # vcorr_ll, vcorr_ul = compute.boot_ci(vcorrs, ci=self.inputs.ci)
+
+                # # update results object with split-half resampling results
+                # res['splitres'].update(dict(ucorr=orig_ucorr,
+                #                             vcorr=orig_vcorr,
+                #                             ucorr_pvals=ucorr_prob,
+                #                             vcorr_pvals=vcorr_prob,
+                #                             ucorr_lolim=ucorr_ll,
+                #                             vcorr_lolim=vcorr_ll,
+                #                             ucorr_uplim=ucorr_ul,
+                #                             vcorr_uplim=vcorr_ul))
 
         return res
 
@@ -638,7 +652,7 @@ class BasePLS():
         with utils.get_par_func(self.inputs.n_proc,
                                 self.__class__._single_perm) as (par, func):
             out = par(func(self, X=X, Y=Y, inds=self.permsamp[:, i],
-                           groups=self.dummy, original=self.res['y_weights'],
+                           groups=self.dummy, original=[self.res['x_weights'], self.res['y_weights']],
                            seed=i)
                       for i in gen)
         d_perm, ucorrs, vcorrs = [np.stack(o, axis=-1) for o in zip(*out)]
@@ -684,19 +698,36 @@ class BasePLS():
         # optionally get rotated/rescaled singular values
         if self.inputs.rotate:
             if original is None:
-                original = self.svd(X, Y, groups=groups, seed=seed)[-1]
-            ssd = np.sqrt(np.sum(compute.procrustes(original, V, d)**2,
-                                 axis=0))
+                original = self.svd(X, Y, groups=groups, seed=seed)
+            
+            # Either rotate the right (convention) or both
+            # If both, take the average of the redistributed singular values from either rotation
+            if self.inputs.rotate_method == 'both':
+                rotated1 = compute.procrustes(original[0], U, d)
+                ssd1 = np.sqrt(np.sum(rotated1**2, axis=0))
+
+                rotated2 = compute.procrustes(original[1], V, d)
+                ssd2 = np.sqrt(np.sum(rotated2**2, axis=0))
+                
+                ssd = (ssd1 + ssd2) / 2
+
+            elif self.inputs.rotate_method == 'right':
+                rotated = compute.procrustes(original[1], V, d)
+                ssd = np.sqrt(np.sum(rotated**2, axis=0))
+
         else:
             ssd = np.diag(d)
 
-        # get ucorr/vcorr if split-half resampling requested
-        if self.inputs.n_split is not None:
-            di = np.linalg.inv(d)
-            ucorr, vcorr = self.split_half(Xp, Yp, U @ di, V @ di,
-                                           groups=groups, seed=seed)
-        else:
-            ucorr, vcorr = None, None
+
+        # # get ucorr/vcorr if split-half resampling requested
+        # if self.inputs.n_split is not None:
+        #     di = np.linalg.inv(d)
+        #     ucorr, vcorr = self.split_half(Xp, Yp, U @ di, V @ di,
+        #                                    groups=groups, seed=seed)
+        # else:
+        #     ucorr, vcorr = None, None
+
+        ucorr, vcorr = None, None
 
         return ssd, ucorr, vcorr
 
@@ -745,15 +776,33 @@ class BasePLS():
         vcorr = np.zeros(shape=(vd.shape[-1], self.inputs.n_split))
 
         for i in range(self.inputs.n_split):
-            # calculate cross-covariance matrix for both splits
+            # run a separate SVD for both splits
             spl = splitsamp[:, i]
-            D1 = self.gen_covcorr(X[spl], Y[spl], groups=groups[spl])
-            D2 = self.gen_covcorr(X[~spl], Y[~spl], groups=groups[~spl])
+            X1 = X[spl]
+            Y1 = Y[spl]
+            X2 = X[~spl]
+            Y2 = Y[~spl]
 
-            # project cross-covariance matrices onto original SVD to obtain
-            # left & right singular vector and correlate between split halves
-            ucorr[:, i] = compute.efficient_corr(D1.T @ vd, D2.T @ vd)
-            vcorr[:, i] = compute.efficient_corr(D1 @ ud, D2 @ ud)
+            groups1 = utils.dummy_code([X1.shape[0]], self.inputs.n_cond)
+            groups2 = utils.dummy_code([X2.shape[0]], self.inputs.n_cond)
 
+            U1, d1, V1 = self.svd(X1, Y1, groups=groups1, seed=seed)
+            U2, d2, V2 = self.svd(X2, Y2, groups=groups2, seed=seed)
+
+            # Correlate U and V weights for both splits across subjects
+            ucorr[:,i] = compute.efficient_corr(U1, U2)
+            vcorr[:,i] = compute.efficient_corr(V1, V2)
+
+            # D1 = self.gen_covcorr(X[spl], Y[spl], groups=groups[spl])
+            # D2 = self.gen_covcorr(X[~spl], Y[~spl], groups=groups[~spl])
+
+            # # project cross-covariance matrices onto original SVD to obtain
+            # # left & right singular vector and correlate between split halves
+            # ucorr[:, i] = compute.efficient_corr(D1.T @ vd, D2.T @ vd)
+            # vcorr[:, i] = compute.efficient_corr(D1 @ ud, D2 @ ud)
+
+
+        # Return correlations between singular vectors for each split (guess can avg. later)
+        return ucorr, vcorr
         # return average correlations for singular vectors across `n_split`
-        return np.mean(ucorr, axis=-1), np.mean(vcorr, axis=-1)
+        # return np.mean(ucorr, axis=-1), np.mean(vcorr, axis=-1)
