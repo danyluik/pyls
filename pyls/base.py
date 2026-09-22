@@ -377,13 +377,13 @@ class BasePLS():
                                                 res['x_weights'] @ di,
                                                 res['y_weights'] @ di,
                                                 seed=self.rs)
-                # get acerage for permutation testing
+                # get average for permutation testing
                 avg_ucorr = np.mean(ucorr, axis=-1)
                 avg_vcorr = np.mean(vcorr, axis=-1)
 
                 # get p-values for ucorr/vcorr
-                ucorr_prob = compute.perm_sig(np.diag(orig_ucorr), ucorrs)
-                vcorr_prob = compute.perm_sig(np.diag(orig_vcorr), vcorrs)
+                ucorr_prob = compute.perm_sig(np.diag(avg_ucorr), ucorrs)
+                vcorr_prob = compute.perm_sig(np.diag(avg_vcorr), vcorrs)
 
                 # get confidence intervals for ucorr/vcorr
                 ucorr_ll, ucorr_ul = compute.boot_ci(ucorrs, ci=self.inputs.ci)

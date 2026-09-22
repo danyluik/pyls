@@ -10,7 +10,7 @@ from .. import compute, utils
 class BehavioralPLS(BasePLS):
     def __init__(self, X, Y, *, groups=None, n_cond=1, n_perm=5000,
                  n_boot=5000, n_split=100, test_size=0.25, test_split=100,
-                 covariance=False, rotate=True, ci=95, permsamples=None,
+                 covariance=False, rotate=False, ci=95, permsamples=None,
                  bootsamples=None, seed=None, verbose=True, n_proc=None,
                  **kwargs):
 
@@ -183,10 +183,19 @@ class BehavioralPLS(BasePLS):
 
         res = super().run_pls(X, Y)
 
+        # scores should be computed from the same kind of data the weights
+        # came from: standardized (z-scored) for correlation, raw for covariance
+        if self.inputs.covariance:
+            Xz, Yz = X, Y
+        else:
+            Xz, Yz = compute.zscore(X, ddof=1), compute.zscore(Y, ddof=1)
+
+        res['x_scores'] = Xz @ res['x_weights']
+
         # mechanism for splitting outputs along group / condition indices
         grps = np.repeat(res['inputs']['groups'], res['inputs']['n_cond'])
         res['y_scores'] = np.vstack([
-            y @ v for (y, v) in zip(np.split(Y, np.cumsum(grps)[:-1]),
+            y @ v for (y, v) in zip(np.split(Yz, np.cumsum(grps)[:-1]),
                                     np.split(res['y_weights'], len(grps)))
         ])
 
@@ -230,7 +239,7 @@ class BehavioralPLS(BasePLS):
 # let's make it a function
 def behavioral_pls(X, Y, *, groups=None, n_cond=1, n_perm=5000, n_boot=5000,
                    n_split=0, test_size=0.25, test_split=100,
-                   covariance=False, rotate=True, ci=95, permsamples=None,
+                   covariance=False, rotate=False, ci=95, permsamples=None,
                    bootsamples=None, seed=None, verbose=True, n_proc=None,
                    **kwargs):
     pls = BehavioralPLS(X=X, Y=Y, groups=groups, n_cond=n_cond,
