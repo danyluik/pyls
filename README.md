@@ -52,3 +52,8 @@ The outputs are summarized below:
 
 Note that the split-half values you get will all be absolute values to account for any arbitrary LV sign flips within a given split.
 
+
+# Other notes
+
+* By default, p-values are calculated from permutation testing without performing a Procrustes rotation, which artificially inflates significance of early LVs (https://doi.org/10.1162/imag_a_00434)
+* X and Y matrices are z-scored before calculating subject scores. Otherwise, variables on a larger scale tend to dominate the score calculations.
