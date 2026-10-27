@@ -772,13 +772,9 @@ class BasePLS():
             X2 = X[~spl]
             Y2 = Y[~spl]
 
-            # group labels (should just dummy code)
-            if groups is None:
-                groups1 = utils.dummy_code([X1.shape[0]], self.inputs.n_cond)
-                groups2 = utils.dummy_code([X2.shape[0]], self.inputs.n_cond)
-            else:
-                groups1 = groups[spl]
-                groups2 = groups[spl]
+            # group labels for either split
+            groups1 = groups[spl]
+            groups2 = groups[~spl]
 
             # run SVD separately for each split
             U1, d1, V1 = self.svd(X1, Y1, groups=groups1, seed=seed)

@@ -75,7 +75,10 @@ class BehavioralPLS(BasePLS):
             Behavioral correlations for single bootstrap resample
         """
 
-        tusc = X @ compute.normalize(original)
+        # scores from the same kind of data as in run_pls: standardized for
+        # correlation, raw for covariance
+        Xz = X if self.inputs.covariance else compute.zscore(X, ddof=1)
+        tusc = Xz @ compute.normalize(original)
 
         return self.gen_covcorr(tusc, Y, groups=groups)
 

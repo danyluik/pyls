@@ -159,6 +159,13 @@ class PLSInputs(ResDict):
         if self.get('test_split') == 0:
             self['test_split'] = None
 
+        # permindices is documented as defaulting to True but was never set,
+        # so None made _single_perm treat the permutation indices as a
+        # pre-permuted Y matrix (meaningless permutation p-values for one
+        # group, crash for multiple groups)
+        if self.get('permindices') is None:
+            self['permindices'] = True
+
         if self.get('n_proc') is not None:
             n_proc = self.get('n_proc')
             if n_proc == 'max' or n_proc == -1:
